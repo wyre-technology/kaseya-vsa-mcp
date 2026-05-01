@@ -353,19 +353,19 @@ function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
 
         case "kaseya_vsa_get_software_inventory": {
           const { agentId } = args as { agentId: string };
-          const sw = await c.audit.software(agentId);
+          const sw = await c.audit.listSoftware(agentId);
           return { content: [{ type: "text", text: JSON.stringify(sw ?? [], null, 2) }] };
         }
 
         case "kaseya_vsa_get_hardware_inventory": {
           const { agentId } = args as { agentId: string };
-          const hw = await c.audit.hardware(agentId);
+          const hw = await c.audit.getHardware(agentId);
           return { content: [{ type: "text", text: JSON.stringify(hw ?? {}, null, 2) }] };
         }
 
         case "kaseya_vsa_get_patch_status": {
           const { agentId } = args as { agentId: string };
-          const status = await c.patches.status(agentId);
+          const status = await c.patches.getStatus(agentId);
           return { content: [{ type: "text", text: JSON.stringify(status ?? {}, null, 2) }] };
         }
 
