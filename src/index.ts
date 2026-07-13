@@ -32,18 +32,44 @@ interface KaseyaVsaCredentials {
   kaseyaOneToken?: string;
 }
 
-function getCredentials(): KaseyaVsaCredentials | null {
-  const baseUrl = process.env.KASEYA_VSA_TENANT_URL;
+// An unresolved MCPB/DXT manifest placeholder, e.g. "${user_config.kaseya_vsa_k1_token}".
+// Desktop hosts inject the config template verbatim when its optional user_config
+// field is left blank, so the literal string arrives in the env var / header.
+const CONFIG_PLACEHOLDER = /^\$\{.*\}$/;
+
+/**
+ * Normalise a single credential read from an env var or gateway header.
+ *
+ * Returns `undefined` for values that are effectively absent, so the auth layer
+ * treats them as "no credential" rather than a real secret:
+ *   - undefined / empty / whitespace-only
+ *   - an unresolved manifest placeholder like `${user_config.kaseya_vsa_k1_token}`
+ *
+ * Root cause of issue #73: a blank optional Kaseya One token field left the literal
+ * `${user_config.kaseya_vsa_k1_token}` in KASEYA_VSA_K1_TOKEN. Because that token
+ * (when truthy) is preferred over local username/password in createClient, every
+ * request authenticated with the bogus placeholder as the SSO token and failed —
+ * even with valid local credentials configured. Stripping the placeholder here lets
+ * local auth take over.
+ */
+export function cleanCredential(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || CONFIG_PLACEHOLDER.test(trimmed)) return undefined;
+  return trimmed;
+}
+
+export function getCredentials(): KaseyaVsaCredentials | null {
+  const baseUrl = cleanCredential(process.env.KASEYA_VSA_TENANT_URL);
   if (!baseUrl) return null;
-  const username = process.env.KASEYA_VSA_USERNAME;
-  const password = process.env.KASEYA_VSA_PASSWORD;
-  const kaseyaOneToken = process.env.KASEYA_VSA_K1_TOKEN;
+  const username = cleanCredential(process.env.KASEYA_VSA_USERNAME);
+  const password = cleanCredential(process.env.KASEYA_VSA_PASSWORD);
+  const kaseyaOneToken = cleanCredential(process.env.KASEYA_VSA_K1_TOKEN);
   const hasLocal = !!(username && password);
   if (!hasLocal && !kaseyaOneToken) return null;
   return { baseUrl, username, password, kaseyaOneToken };
 }
 
-function createClient(creds: KaseyaVsaCredentials): KaseyaVsaClient {
+export function createClient(creds: KaseyaVsaCredentials): KaseyaVsaClient {
   const opts: Record<string, unknown> = { baseUrl: creds.baseUrl };
   if (creds.kaseyaOneToken) {
     opts.kaseyaOneToken = creds.kaseyaOneToken;
@@ -523,10 +549,10 @@ async function startHttpTransport(): Promise<void> {
       let gatewayCredentials: KaseyaVsaCredentials | undefined;
       if (isGatewayMode) {
         const headers = req.headers as Record<string, string | string[] | undefined>;
-        const baseUrl = headers["x-kaseya-vsa-tenant-url"] as string | undefined;
-        const username = headers["x-kaseya-vsa-username"] as string | undefined;
-        const password = headers["x-kaseya-vsa-password"] as string | undefined;
-        const kaseyaOneToken = headers["x-kaseya-vsa-k1-token"] as string | undefined;
+        const baseUrl = cleanCredential(headers["x-kaseya-vsa-tenant-url"] as string | undefined);
+        const username = cleanCredential(headers["x-kaseya-vsa-username"] as string | undefined);
+        const password = cleanCredential(headers["x-kaseya-vsa-password"] as string | undefined);
+        const kaseyaOneToken = cleanCredential(headers["x-kaseya-vsa-k1-token"] as string | undefined);
 
         const hasLocal = !!(username && password);
         if (!baseUrl || (!hasLocal && !kaseyaOneToken)) {
@@ -633,4 +659,8 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(console.error);
+// Guard the bootstrap so importing this module in tests does not start a server
+// (vitest sets NODE_ENV=test by default).
+if (process.env.NODE_ENV !== "test") {
+  main().catch(console.error);
+}
