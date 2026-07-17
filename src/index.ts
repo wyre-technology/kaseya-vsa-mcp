@@ -15,11 +15,22 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { KaseyaVsaClient } from "@wyre-technology/node-kaseya-vsa";
+import { KaseyaVsaClient, type VsaAgent } from "@wyre-technology/node-kaseya-vsa";
 import { setServerRef } from "./utils/server-ref.js";
 import { elicitConfirmation, elicitSelection, elicitText } from "./utils/elicitation.js";
+import {
+  DEVICE_CARD_META,
+  DEVICE_CARD_RESOURCE_URI,
+  MCP_APP_RESOURCE_MIME,
+  applyBrandInjection,
+  brandFromEnv,
+  buildDeviceCard,
+} from "./device-card.js";
+import { DEVICE_CARD_HTML } from "./generated/device-card-html.js";
 
 // ---------------------------------------------------------------------------
 // Credentials
@@ -84,7 +95,7 @@ export function createClient(creds: KaseyaVsaCredentials): KaseyaVsaClient {
 // Server factory — fresh server per request (stateless HTTP mode)
 // ---------------------------------------------------------------------------
 
-function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
+export function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
   const server = new Server(
     {
       name: "kaseya-vsa-mcp",
@@ -93,6 +104,7 @@ function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
     {
       capabilities: {
         tools: {},
+        resources: {},
       },
     }
   );
@@ -118,6 +130,7 @@ function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
         {
           name: "kaseya_vsa_get_agent",
           description: "Get details for a managed endpoint by agent ID.",
+          _meta: DEVICE_CARD_META,
           inputSchema: {
             type: "object",
             properties: {
@@ -238,6 +251,40 @@ function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
               top: { type: "number", description: "Max records (default 250)", default: 250 },
             },
           },
+        },
+      ],
+    };
+  });
+
+  // MCP Apps (SEP-1865): the ui:// device card is static HTML embedded at
+  // build time (src/generated/device-card-html.ts), so it serves identically
+  // from stdio, Node HTTP, and fs-less runtimes.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return {
+      resources: [
+        {
+          uri: DEVICE_CARD_RESOURCE_URI,
+          name: "Kaseya VSA Device Card",
+          description: "Interactive MCP Apps card rendering a Kaseya VSA managed endpoint",
+          mimeType: MCP_APP_RESOURCE_MIME,
+        },
+      ],
+    };
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
+    if (uri !== DEVICE_CARD_RESOURCE_URI) {
+      throw new Error(`Unknown resource: ${uri}`);
+    }
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: MCP_APP_RESOURCE_MIME,
+          // The card ships neutral; operators brand it at serve time via
+          // MCP_BRAND_* env vars (no vars = HTML served unchanged).
+          text: applyBrandInjection(DEVICE_CARD_HTML, brandFromEnv()),
         },
       ],
     };
@@ -374,7 +421,11 @@ function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Server {
         case "kaseya_vsa_get_agent": {
           const { agentId } = args as { agentId: string };
           const agent = await c.agents.get(agentId);
-          return { content: [{ type: "text", text: JSON.stringify(agent ?? {}, null, 2) }] };
+          // MCP Apps: attach the normalized payload the ui:// device card
+          // renders from. Best-effort — a null card just means no UI surface.
+          const card = buildDeviceCard(agent as Partial<VsaAgent> | undefined);
+          const payload = card ? { ...(agent as object), _card: card } : agent;
+          return { content: [{ type: "text", text: JSON.stringify(payload ?? {}, null, 2) }] };
         }
 
         case "kaseya_vsa_get_software_inventory": {

@@ -13,7 +13,7 @@ to AI assistants.
 | Tool | Description |
 |------|-------------|
 | `kaseya_vsa_list_agents` | List managed endpoints (agents). Optional `$filter`. |
-| `kaseya_vsa_get_agent` | Get an agent's details by ID. |
+| `kaseya_vsa_get_agent` | Get an agent's details by ID (renders as an interactive card in MCP Apps hosts). |
 | `kaseya_vsa_get_software_inventory` | Installed software for an agent. |
 | `kaseya_vsa_get_hardware_inventory` | Hardware audit for an agent. |
 | `kaseya_vsa_get_patch_status` | Pending and installed patches for an agent. |
@@ -27,6 +27,18 @@ to AI assistants.
 
 When the user omits required filters or runs a destructive action, the server
 uses MCP elicitation to prompt for choices or confirm.
+
+### Interactive device card (MCP Apps)
+
+`kaseya_vsa_get_agent` renders as a read-only interactive device card in MCP
+Apps hosts (Claude Desktop/web), showing the endpoint's name, online status,
+organization, machine group, OS, IP address, and last check-in. The card is
+neutral by default, brandable via `window.__BRAND__` injection or
+`MCP_BRAND_*` env vars (`MCP_BRAND_NAME`, `MCP_BRAND_LOGO_URL`,
+`MCP_BRAND_PRIMARY_COLOR`, `MCP_BRAND_ACCENT_COLOR`, `MCP_BRAND_BG`,
+`MCP_BRAND_TEXT`) applied at serve time. Plain-JSON behavior is unchanged in
+other hosts. After editing `ui/`, regenerate the embedded bundle with
+`npm run build:ui`.
 
 ## Configuration
 
