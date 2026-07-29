@@ -20,7 +20,7 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { KaseyaVsaClient, type VsaAgent } from "@wyre-technology/node-kaseya-vsa";
-import { setServerRef } from "./utils/server-ref.js";
+import { bindServerRef, runWithServerRef } from "./utils/server-ref.js";
 import { elicitConfirmation, elicitSelection, elicitText } from "./utils/elicitation.js";
 import {
   DEVICE_CARD_META,
@@ -109,7 +109,10 @@ export function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Ser
     }
   );
 
-  setServerRef(server);
+  // The caller owns binding this server into server-ref.ts's scope now
+  // (bindServerRef for stdio's single session, runWithServerRef wrapping
+  // the whole per-request chain for HTTP) — createMcpServer() stays
+  // side-effect-free with respect to server-ref.
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -548,6 +551,10 @@ export function createMcpServer(credentialOverrides?: KaseyaVsaCredentials): Ser
 
 async function startStdioTransport(): Promise<void> {
   const server = createMcpServer();
+  // stdio is single-session for the whole process — no concurrent tenants
+  // to isolate from each other, so enterWith's process-lifetime binding is
+  // safe.
+  bindServerRef(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Kaseya VSA MCP server running on stdio");
@@ -637,24 +644,31 @@ async function startHttpTransport(): Promise<void> {
         server.close();
       });
 
-      server
-        .connect(transport as unknown as Transport)
-        .then(() => {
-          transport.handleRequest(req, res);
-        })
-        .catch((err) => {
-          console.error("MCP transport error:", err);
-          if (!res.headersSent) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                error: { code: -32603, message: "Internal error" },
-                id: null,
-              })
-            );
-          }
-        });
+      // The whole chain below (connect through the catch handler) runs
+      // inside runWithServerRef so the server-ref binding — used by
+      // elicitation (elicitConfirmation/elicitSelection/elicitText) —
+      // survives every await gap in this request's lifecycle without
+      // leaking into a concurrent request's server-ref.
+      runWithServerRef(server, () =>
+        server
+          .connect(transport as unknown as Transport)
+          .then(() => {
+            transport.handleRequest(req, res);
+          })
+          .catch((err) => {
+            console.error("MCP transport error:", err);
+            if (!res.headersSent) {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  error: { code: -32603, message: "Internal error" },
+                  id: null,
+                })
+              );
+            }
+          })
+      );
 
       return;
     }
