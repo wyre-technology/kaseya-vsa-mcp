@@ -5,9 +5,9 @@
   "version": "0.0.0",
   "description": "MCP server for Kaseya VSA RMM - manage endpoints, patches, procedures, alarms, and tickets through AI assistants",
   "long_description": "Provides AI assistants with structured access to your Kaseya VSA RMM tenant. List managed endpoints, inspect software/hardware inventory, review and deploy patches, run agent procedures, triage alarms, browse Service Desk tickets, and explore organizations and machine groups via the Model Context Protocol.",
-  "author": { "name": "Wyre Technology", "url": "https://github.com/wyre-technology" },
-  "repository": { "type": "git", "url": "https://github.com/wyre-technology/kaseya-vsa-mcp" },
-  "homepage": "https://github.com/wyre-technology/kaseya-vsa-mcp",
+  "author": { "name": "Wyre Technology", "url": "https://github.com/WYRE-AI" },
+  "repository": { "type": "git", "url": "https://github.com/WYRE-AI/kaseya-vsa-mcp" },
+  "homepage": "https://github.com/WYRE-AI/kaseya-vsa-mcp",
   "license": "Apache-2.0",
   "keywords": ["kaseya", "vsa", "rmm", "msp", "patches", "endpoints"],
   "server": {
