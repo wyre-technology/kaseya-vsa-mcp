@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.wyre-technology/kaseya-vsa-mcp",
+  "name": "io.github.WYRE-AI/kaseya-vsa-mcp",
   "title": "Kaseya VSA",
   "description": "MCP server for Kaseya VSA RMM — agents, patches, procedures, alarms, tickets.",
   "repository": {
-    "url": "https://github.com/wyre-technology/kaseya-vsa-mcp",
+    "url": "https://github.com/WYRE-AI/kaseya-vsa-mcp",
     "source": "github"
   },
   "version": "0.0.0",
-  "websiteUrl": "https://github.com/wyre-technology/kaseya-vsa-mcp",
+  "websiteUrl": "https://github.com/WYRE-AI/kaseya-vsa-mcp",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/wyre-technology/kaseya-vsa-mcp:0.0.0",
+      "identifier": "ghcr.io/wyre-ai/kaseya-vsa-mcp:0.0.0",
       "transport": {
         "type": "stdio"
       },
